@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PROSPECT
+  SALES_MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum CertificationStatus {
+  ONBOARDING
+  CLASS_SIGNUP_PENDING
+  IN_PROGRESS
+  CERTIFIED
+}
+
+enum InviteStatusRole {
+  PROSPECT
+  SALES_MANAGER
+}
+
+enum ClassSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+}
+
+enum ClassEnrollmentStatus {
+  ENROLLED
+  COMPLETED
+  CANCELED
+}
+
+enum EquipmentRegistrationStatus {
+  SUBMITTED
+  APPROVED
+  NEEDS_REVIEW
+}
+
+enum ResourceType {
+  CATALOG
+  REGISTRATION_OVERVIEW
+  DOCUMENT
+  APP
+}
+
+enum TodoItemType {
+  CLASS_SIGNUP
+  EQUIPMENT_REGISTRATION
+  MARKETING_CONSULTATION
+  JB_WARRANTIES
+  RESOURCE_REVIEW
+}
+
+enum TodoItemStatus {
+  OPEN
+  COMPLETED
+}
+
+enum BenefitType {
+  DISCOUNT
+  WARRANTY
+  LEAD_GENERATION
+}
+
+enum MarketingSubmissionStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  COMPLETED
+  FAILED
+}
+
+enum LeadRecordStatus {
+  NEW
+  CONTACTED
+  IN_PROGRESS
+  CERTIFIED
+  LOST
+}
+
+enum ConversationType {
+  PROSPECT_MANAGER
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  lastLoginAt  DateTime?
+
+  prospectProfile     ProspectProfile?          @relation("ProspectUser")
+  salesManagerProfile SalesManagerProfile?      @relation("SalesManagerUser")
+  assignedProspects   ProspectProfile[]         @relation("AssignedSalesManager")
+  classEnrollments    ClassEnrollment[]
+  equipmentRecords    EquipmentRegistration[]
+  todoItems           TodoItem[]
+  marketingConsults   MarketingConsultation[]
+  prospectLeadRecords LeadRecord[]              @relation("LeadProspect")
+  managedLeadRecords  LeadRecord[]              @relation("LeadManager")
+  participants        ConversationParticipant[]
+  sentMessages        Message[]
+}
+
+model ProspectProfile {
+  id                               String              @id @default(cuid())
+  userId                           String              @unique
+  companyName                      String
+  signupDate                       DateTime            @default(now())
+  assignedSalesManagerId           String
+  certificationStatus              CertificationStatus @default(ONBOARDING)
+  marketingConsultationDueAt       DateTime
+  marketingConsultationCompletedAt DateTime?
+  jbWarrantiesDueAt                DateTime
+  jbWarrantiesCompletedAt          DateTime?
+  createdAt                        DateTime            @default(now())
+  updatedAt                        DateTime            @updatedAt
+
+  user                 User @relation("ProspectUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedSalesManager User @relation("AssignedSalesManager", fields: [assignedSalesManagerId], references: [id])
+}
+
+model SalesManagerProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation("SalesManagerUser", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RegistrationInvite {
+  id                     String           @id @default(cuid())
+  token                  String           @unique
+  roleToCreate           InviteStatusRole @default(PROSPECT)
+  assignedSalesManagerId String
+  expiresAt              DateTime
+  usedAt                 DateTime?
+  createdAt              DateTime         @default(now())
+}
+
+model ClassSession {
+  id          String             @id @default(cuid())
+  title       String
+  description String
+  startsAt    DateTime
+  endsAt      DateTime
+  virtualUrl  String             @unique
+  status      ClassSessionStatus @default(SCHEDULED)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  enrollments ClassEnrollment[]
+}
+
+model ClassEnrollment {
+  id             String                @id @default(cuid())
+  classSessionId String
+  prospectUserId String
+  status         ClassEnrollmentStatus @default(ENROLLED)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  prospect     User         @relation(fields: [prospectUserId], references: [id], onDelete: Cascade)
+
+  @@unique([classSessionId, prospectUserId])
+}
+
+model EquipmentRegistration {
+  id             String                      @id @default(cuid())
+  prospectUserId String
+  equipmentName  String
+  modelNumber    String
+  serialNumber   String                      @unique
+  status         EquipmentRegistrationStatus @default(SUBMITTED)
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  prospect User @relation(fields: [prospectUserId], references: [id], onDelete: Cascade)
+}
+
+model Resource {
+  id           String       @id @default(cuid())
+  title        String
+  description  String
+  resourceType ResourceType
+  url          String       @unique
+  category     String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model TodoItem {
+  id             String         @id @default(cuid())
+  prospectUserId String
+  title          String
+  description    String
+  type           TodoItemType
+  dueAt          DateTime
+  completedAt    DateTime?
+  status         TodoItemStatus @default(OPEN)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  prospect User @relation(fields: [prospectUserId], references: [id], onDelete: Cascade)
+
+  @@unique([prospectUserId, type])
+}
+
+model Benefit {
+  id          String      @id @default(cuid())
+  title       String
+  description String
+  benefitType BenefitType
+  url         String      @unique
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model MarketingConsultation {
+  id                       String                    @id @default(cuid())
+  prospectUserId           String                    @unique
+  availabilityOptionOne    String?
+  availabilityOptionTwo    String?
+  availabilityOptionThree  String?
+  externalSubmissionStatus MarketingSubmissionStatus @default(NOT_SUBMITTED)
+  submittedAt              DateTime?
+  completedAt              DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  prospect User @relation(fields: [prospectUserId], references: [id], onDelete: Cascade)
+}
+
+model LeadRecord {
+  id                     String           @id @default(cuid())
+  prospectUserId         String           @unique
+  assignedSalesManagerId String
+  status                 LeadRecordStatus @default(NEW)
+  notes                  String?
+  externalLeadId         String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  prospect             User @relation("LeadProspect", fields: [prospectUserId], references: [id], onDelete: Cascade)
+  assignedSalesManager User @relation("LeadManager", fields: [assignedSalesManagerId], references: [id])
+}
+
+model Conversation {
+  id            String           @id @default(cuid())
+  type          ConversationType @default(PROSPECT_MANAGER)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  lastMessageAt DateTime?
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String    @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id              String    @id @default(cuid())
+  conversationId  String
+  senderId        String
+  body            String
+  clientMessageId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, clientMessageId])
+  @@index([conversationId, createdAt])
+}

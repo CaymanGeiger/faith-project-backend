@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# builds and coverage
+dist/
+coverage/
+*.tsbuildinfo
+
+# local environment files
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# local database files
+*.db
+*.db-journal

@@ -1,0 +1,1 @@
+ALTER TYPE "ResourceType" ADD VALUE 'APP';
