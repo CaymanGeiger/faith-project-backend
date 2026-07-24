@@ -25,6 +25,6 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup('openapi', app, SwaggerModule.createDocument(app, swaggerConfig));
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
 }
 bootstrap();
