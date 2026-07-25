@@ -15,6 +15,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from './authenticated-user';
+import { InviteDetailsDto } from './dto/invite-details.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterFromInviteDto } from './dto/register-from-invite.dto';
 
@@ -25,6 +26,23 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  async getInviteDetails(dto: InviteDetailsDto) {
+    const invite = await this.prisma.registrationInvite.findUnique({
+      where: { token: dto.token },
+      select: {
+        roleToCreate: true,
+        usedAt: true,
+        expiresAt: true,
+      },
+    });
+
+    if (!invite || invite.usedAt || invite.expiresAt < new Date()) {
+      throw new BadRequestException('Registration invite is invalid or expired');
+    }
+
+    return { accountType: invite.roleToCreate };
+  }
+
   async registerFromInvite(dto: RegisterFromInviteDto) {
     const invite = await this.prisma.registrationInvite.findUnique({
       where: { token: dto.token },
@@ -34,9 +52,46 @@ export class AuthService {
       throw new BadRequestException('Registration invite is invalid or expired');
     }
 
-    if (invite.roleToCreate !== InviteStatusRole.PROSPECT) {
-      throw new BadRequestException('This registration path is for prospects');
+    if (invite.roleToCreate !== dto.accountType) {
+      throw new BadRequestException(
+        dto.accountType === InviteStatusRole.PROSPECT
+          ? 'This invite is for a Sales Manager account'
+          : 'This invite is for a Dealer account',
+      );
     }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+
+    if (invite.roleToCreate === InviteStatusRole.SALES_MANAGER) {
+      const user = await this.prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email: dto.email.toLowerCase(),
+            passwordHash,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            phone: dto.phone,
+            role: UserRole.SALES_MANAGER,
+            status: UserStatus.ACTIVE,
+            salesManagerProfile: { create: {} },
+          },
+        });
+
+        await tx.registrationInvite.update({
+          where: { id: invite.id },
+          data: { usedAt: new Date() },
+        });
+
+        return createdUser;
+      });
+
+      return this.buildAuthResponse(user);
+    }
+
+    if (!dto.companyName?.trim()) {
+      throw new BadRequestException('Company name is required for dealer accounts');
+    }
+    const companyName = dto.companyName.trim();
 
     const manager = await this.prisma.user.findUnique({
       where: { id: invite.assignedSalesManagerId },
@@ -46,7 +101,6 @@ export class AuthService {
       throw new BadRequestException('Invite is missing a valid sales manager');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
     const signupDate = new Date();
     const marketingDueAt = this.addDays(signupDate, 90);
     const jbDueAt = this.addDays(signupDate, 30);
@@ -63,7 +117,7 @@ export class AuthService {
           status: UserStatus.ACTIVE,
           prospectProfile: {
             create: {
-              companyName: dto.companyName,
+              companyName,
               signupDate,
               assignedSalesManagerId: manager.id,
               certificationStatus: CertificationStatus.ONBOARDING,

@@ -1,4 +1,9 @@
-import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
+import {
+  InviteStatusRole,
+  PrismaClient,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -86,6 +91,22 @@ async function main() {
     },
     create: {
       token: 'prospect-demo-token',
+      assignedSalesManagerId: manager.id,
+      expiresAt: addDays(now, 30),
+    },
+  });
+
+  await prisma.registrationInvite.upsert({
+    where: { token: 'manager-demo-token' },
+    update: {
+      roleToCreate: InviteStatusRole.SALES_MANAGER,
+      assignedSalesManagerId: manager.id,
+      expiresAt: addDays(now, 30),
+      usedAt: null,
+    },
+    create: {
+      token: 'manager-demo-token',
+      roleToCreate: InviteStatusRole.SALES_MANAGER,
       assignedSalesManagerId: manager.id,
       expiresAt: addDays(now, 30),
     },

@@ -1,5 +1,7 @@
+import { InviteStatusRole } from '@prisma/client';
 import {
   IsEmail,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -7,6 +9,9 @@ import {
 } from 'class-validator';
 
 export class RegisterFromInviteDto {
+  @IsEnum(InviteStatusRole)
+  accountType!: InviteStatusRole;
+
   @IsString()
   @IsNotEmpty()
   token!: string;
@@ -30,7 +35,7 @@ export class RegisterFromInviteDto {
   @IsString()
   phone?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  companyName!: string;
+  companyName?: string;
 }

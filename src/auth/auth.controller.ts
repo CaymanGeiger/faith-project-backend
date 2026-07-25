@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import type { AuthenticatedUser } from './authenticated-user';
 import { CurrentUser } from './current-user.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { InviteDetailsDto } from './dto/invite-details.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterFromInviteDto } from './dto/register-from-invite.dto';
 
@@ -11,6 +12,11 @@ import { RegisterFromInviteDto } from './dto/register-from-invite.dto';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('invite-details')
+  inviteDetails(@Body() dto: InviteDetailsDto) {
+    return this.authService.getInviteDetails(dto);
+  }
 
   @Post('register-from-invite')
   registerFromInvite(@Body() dto: RegisterFromInviteDto) {
