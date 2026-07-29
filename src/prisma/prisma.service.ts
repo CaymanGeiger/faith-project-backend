@@ -29,7 +29,7 @@ function withProductionConnectionSettings(databaseUrl: string) {
     url.searchParams.set('pool_timeout', '15');
   }
   if (!url.searchParams.has('connection_limit')) {
-    url.searchParams.set('connection_limit', '5');
+    url.searchParams.set('connection_limit', '10');
   }
 
   return url.toString();

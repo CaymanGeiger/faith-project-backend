@@ -1,5 +1,10 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { TodoItemStatus, UserRole } from '@prisma/client';
+import {
+  ClassEnrollmentStatus,
+  MarketingSubmissionStatus,
+  TodoItemStatus,
+  UserRole,
+} from '@prisma/client';
 import { AuthenticatedUser } from '../auth/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateMeDto } from './dto/update-me.dto';
@@ -67,28 +72,52 @@ export class UsersService {
   }
 
   async getOnboardingStatus(user: AuthenticatedUser) {
-    const profile = await this.prisma.prospectProfile.findUniqueOrThrow({
-      where: { userId: user.id },
-    });
-
-    const [openTodos, completedTodos, classes, equipmentRecords, consultation] =
-      await Promise.all([
-        this.prisma.todoItem.count({
-          where: { prospectUserId: user.id, status: TodoItemStatus.OPEN },
-        }),
-        this.prisma.todoItem.count({
-          where: { prospectUserId: user.id, status: TodoItemStatus.COMPLETED },
-        }),
-        this.prisma.classEnrollment.count({
-          where: { prospectUserId: user.id },
-        }),
-        this.prisma.equipmentRegistration.count({
-          where: { prospectUserId: user.id },
-        }),
-        this.prisma.marketingConsultation.findUnique({
-          where: { prospectUserId: user.id },
-        }),
-      ]);
+    const [
+      profile,
+      openTodos,
+      completedTodos,
+      classes,
+      activeClasses,
+      completedClasses,
+      equipmentRecords,
+      consultation,
+    ] = await this.prisma.$transaction([
+      this.prisma.prospectProfile.findUniqueOrThrow({
+        where: { userId: user.id },
+      }),
+      this.prisma.todoItem.count({
+        where: { prospectUserId: user.id, status: TodoItemStatus.OPEN },
+      }),
+      this.prisma.todoItem.count({
+        where: { prospectUserId: user.id, status: TodoItemStatus.COMPLETED },
+      }),
+      this.prisma.classEnrollment.count({
+        where: { prospectUserId: user.id },
+      }),
+      this.prisma.classEnrollment.count({
+        where: {
+          prospectUserId: user.id,
+          status: {
+            in: [
+              ClassEnrollmentStatus.ENROLLED,
+              ClassEnrollmentStatus.COMPLETED,
+            ],
+          },
+        },
+      }),
+      this.prisma.classEnrollment.count({
+        where: {
+          prospectUserId: user.id,
+          status: ClassEnrollmentStatus.COMPLETED,
+        },
+      }),
+      this.prisma.equipmentRegistration.count({
+        where: { prospectUserId: user.id },
+      }),
+      this.prisma.marketingConsultation.findUnique({
+        where: { prospectUserId: user.id },
+      }),
+    ]);
 
     return {
       profile,
@@ -99,6 +128,17 @@ export class UsersService {
         equipmentRegistrations: equipmentRecords,
         marketingConsultationStatus:
           consultation?.externalSubmissionStatus ?? 'NOT_SUBMITTED',
+        trainingSelected: activeClasses > 0,
+        trainingCompleted: completedClasses > 0,
+        firstEquipmentRegistered: equipmentRecords > 0,
+        jbWarrantiesCompleted: Boolean(profile.jbWarrantiesCompletedAt),
+        marketingConsultationSubmitted:
+          Boolean(consultation?.submittedAt) &&
+          (consultation?.externalSubmissionStatus ===
+            MarketingSubmissionStatus.SUBMITTED ||
+            consultation?.externalSubmissionStatus ===
+              MarketingSubmissionStatus.COMPLETED),
+        marketingConsultationCompleted: Boolean(consultation?.completedAt),
       },
     };
   }
