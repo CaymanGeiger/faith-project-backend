@@ -13,20 +13,36 @@
     "build": "nest build",
     "heroku-postbuild": "npm run db:generate && npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
+    "start": "NODE_ENV=development nest start",
+    "start:dev": "NODE_ENV=development nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/src/main",
+    "start:prod": "NODE_ENV=production node dist/src/main",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "preview:fixtures": "ts-node --transpile-only scripts/prepare-preview-fixtures.ts",
+    "privacy:process-deletion": "ts-node --transpile-only scripts/process-account-deletion.ts",
+    "privacy:reassign-manager": "ts-node --transpile-only scripts/reassign-manager-relationships.ts",
+    "invitations:create": "ts-node --transpile-only scripts/create-registration-invite.ts",
+    "jotform:maintenance": "ts-node --transpile-only scripts/jotform-maintenance.ts",
+    "jotform:register-webhook": "ts-node --transpile-only scripts/jotform-register-webhook.ts",
+    "jotform:status": "ts-node --transpile-only scripts/jotform-status.ts",
+    "jotform:replay": "ts-node --transpile-only scripts/jotform-replay.ts",
+    "safety:reports": "ts-node --transpile-only scripts/manage-message-reports.ts",
+    "safety:resolve-report": "ts-node --transpile-only scripts/manage-message-reports.ts",
+    "safety:remove-message": "ts-node --transpile-only scripts/manage-message-reports.ts",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "privacy:link-submission": "ts-node --transpile-only scripts/link-submission-owner.ts",
+    "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "typecheck": "tsc --noEmit",
+    "jotform:worker": "ts-node --transpile-only scripts/jotform-maintenance.ts --watch",
+    "privacy:erase-submission": "ts-node --transpile-only scripts/erase-verified-submission.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -35,12 +51,14 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.1.28",
-    "@nestjs/swagger": "^11.4.6",
+    "@nestjs/swagger": "^11.4.7",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.28",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "nodemailer": "^10.0.11",
     "prisma": "^6.19.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -58,6 +76,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -65,12 +84,27 @@
     "globals": "^17.0.0",
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
+    "socket.io-client": "^4.8.4",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.2",
     "tsconfig-paths": "^4.2.0",
     "typescript-eslint": "^8.20.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2",
+    "qs": "^6.16.0",
+    "@nestjs/platform-express": {
+      "multer": "^2.5.0",
+      "express": {
+        "body-parser": "^2.4.0",
+        "proxy-addr": "^2.0.8"
+      }
+    },
+    "@nestjs/swagger": {
+      "js-yaml": "^5.5.0"
+    }
   },
   "jest": {
     "moduleFileExtensions": [

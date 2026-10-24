@@ -1,3 +1,4 @@
+import { AllowBeforeTraining } from '../onboarding/onboarding-access';
 import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
@@ -11,6 +12,7 @@ import { ClassesService } from './classes.service';
 @ApiTags('classes')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
+@AllowBeforeTraining()
 @Controller()
 export class ClassesController {
   constructor(private readonly classesService: ClassesService) {}

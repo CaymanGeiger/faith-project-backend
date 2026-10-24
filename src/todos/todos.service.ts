@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { TodoItemStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateTodoDto } from './dto/update-todo.dto';
@@ -25,21 +29,36 @@ export class TodosService {
       throw new NotFoundException('To-do item not found');
     }
 
-    const todo = await this.prisma.todoItem.update({
-      where: { id },
-      data: {
-        status: dto.completed ? TodoItemStatus.COMPLETED : TodoItemStatus.OPEN,
-        completedAt: dto.completed ? new Date() : null,
-      },
-    });
-
-    if (todo.type === 'JB_WARRANTIES' && dto.completed) {
-      await this.prisma.prospectProfile.update({
-        where: { userId: prospectUserId },
-        data: { jbWarrantiesCompletedAt: todo.completedAt },
-      });
+    if (
+      existing.type !== 'JB_WARRANTIES' &&
+      existing.type !== 'RESOURCE_REVIEW'
+    ) {
+      throw new BadRequestException(
+        'This task is updated automatically when you complete its related action.',
+      );
     }
 
-    return { todo };
+    return this.prisma.$transaction(async (tx) => {
+      const todo = await tx.todoItem.update({
+        where: { id },
+        data: {
+          status: dto.completed
+            ? TodoItemStatus.COMPLETED
+            : TodoItemStatus.OPEN,
+          completedAt: dto.completed ? new Date() : null,
+        },
+      });
+
+      if (todo.type === 'JB_WARRANTIES') {
+        await tx.prospectProfile.update({
+          where: { userId: prospectUserId },
+          data: {
+            jbWarrantiesCompletedAt: dto.completed ? todo.completedAt : null,
+          },
+        });
+      }
+
+      return { todo };
+    });
   }
 }

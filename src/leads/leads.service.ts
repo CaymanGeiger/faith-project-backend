@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeadApiAdapter } from './lead-api.adapter';
 import { UpdateLeadDto } from './dto/update-lead.dto';
@@ -23,6 +27,7 @@ export class LeadsService {
             lastName: true,
             phone: true,
             status: true,
+            initialTrainingVerifiedAt: true,
           },
         },
       },
@@ -43,6 +48,7 @@ export class LeadsService {
             lastName: true,
             phone: true,
             status: true,
+            initialTrainingVerifiedAt: true,
           },
         },
       },
@@ -92,7 +98,10 @@ export class LeadsService {
     return { lead: updatedLead, sync };
   }
 
-  private assertAssigned(assignedSalesManagerId: string, managerUserId: string) {
+  private assertAssigned(
+    assignedSalesManagerId: string,
+    managerUserId: string,
+  ) {
     if (assignedSalesManagerId !== managerUserId) {
       throw new ForbiddenException('Prospect is not assigned to this manager');
     }

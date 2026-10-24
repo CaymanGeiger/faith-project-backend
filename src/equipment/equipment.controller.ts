@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
@@ -28,6 +36,15 @@ export class EquipmentController {
     @Body() dto: CreateEquipmentRegistrationDto,
   ) {
     return this.equipmentService.create(user.id, dto);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: CreateEquipmentRegistrationDto,
+  ) {
+    return this.equipmentService.update(user.id, id, dto);
   }
 
   @Get(':id')

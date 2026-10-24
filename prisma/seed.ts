@@ -1,10 +1,14 @@
 import {
   InviteStatusRole,
   PrismaClient,
+  TodoItemType,
   UserRole,
   UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { CURRENT_TERMS_VERSION } from '../src/legal/legal.constants';
+import { isDevelopmentSeedEnabled } from '../src/config/development';
+import { hashInviteToken } from '../src/auth/invite-token';
 
 const prisma = new PrismaClient();
 
@@ -14,7 +18,16 @@ const addDays = (date: Date, days: number) => {
   return next;
 };
 
+const prospectDemoToken = 'prospect-demo-token';
+const managerDemoToken = 'manager-demo-token';
+
 async function main() {
+  if (!isDevelopmentSeedEnabled()) {
+    throw new Error(
+      'Refusing to seed demo data. Require NODE_ENV=development/test, DEV_FEATURES_ENABLED=true, ALLOW_DEMO_SEED=true and a loopback PostgreSQL database named *_dev, *_test or faith_project.',
+    );
+  }
+
   const passwordHash = await bcrypt.hash('password123', 12);
   const now = new Date();
 
@@ -26,6 +39,9 @@ async function main() {
       lastName: 'Cole',
       role: UserRole.SALES_MANAGER,
       status: UserStatus.ACTIVE,
+      termsAcceptedAt: now,
+      termsVersion: CURRENT_TERMS_VERSION,
+      privacyPolicyAcceptedAt: now,
     },
     create: {
       email: 'manager@hercules.local',
@@ -35,6 +51,9 @@ async function main() {
       phone: '555-0100',
       role: UserRole.SALES_MANAGER,
       status: UserStatus.ACTIVE,
+      termsAcceptedAt: now,
+      termsVersion: CURRENT_TERMS_VERSION,
+      privacyPolicyAcceptedAt: now,
       salesManagerProfile: { create: {} },
     },
   });
@@ -54,6 +73,9 @@ async function main() {
       phone: '555-0111',
       role: UserRole.PROSPECT,
       status: UserStatus.ACTIVE,
+      termsAcceptedAt: now,
+      termsVersion: CURRENT_TERMS_VERSION,
+      privacyPolicyAcceptedAt: now,
     },
     create: {
       email: 'prospect@hercules.local',
@@ -63,6 +85,9 @@ async function main() {
       phone: '555-0111',
       role: UserRole.PROSPECT,
       status: UserStatus.ACTIVE,
+      termsAcceptedAt: now,
+      termsVersion: CURRENT_TERMS_VERSION,
+      privacyPolicyAcceptedAt: now,
     },
   });
 
@@ -82,154 +107,245 @@ async function main() {
     },
   });
 
+  await prisma.registrationInvite.deleteMany({
+    where: { token: { in: [prospectDemoToken, managerDemoToken] } },
+  });
+
   await prisma.registrationInvite.upsert({
-    where: { token: 'prospect-demo-token' },
+    where: { token: hashInviteToken(prospectDemoToken) },
     update: {
       assignedSalesManagerId: manager.id,
+      recipientEmail: 'new-prospect@hercules.local',
       expiresAt: addDays(now, 30),
       usedAt: null,
     },
     create: {
-      token: 'prospect-demo-token',
+      token: hashInviteToken(prospectDemoToken),
       assignedSalesManagerId: manager.id,
+      recipientEmail: 'new-prospect@hercules.local',
       expiresAt: addDays(now, 30),
     },
   });
 
   await prisma.registrationInvite.upsert({
-    where: { token: 'manager-demo-token' },
+    where: { token: hashInviteToken(managerDemoToken) },
     update: {
       roleToCreate: InviteStatusRole.SALES_MANAGER,
       assignedSalesManagerId: manager.id,
+      recipientEmail: 'new-manager@hercules.local',
       expiresAt: addDays(now, 30),
       usedAt: null,
     },
     create: {
-      token: 'manager-demo-token',
+      token: hashInviteToken(managerDemoToken),
       roleToCreate: InviteStatusRole.SALES_MANAGER,
       assignedSalesManagerId: manager.id,
+      recipientEmail: 'new-manager@hercules.local',
       expiresAt: addDays(now, 30),
     },
   });
 
-  await prisma.classSession.createMany({
-    data: [
-      {
-        title: 'LG Dealer Certification: Foundations',
-        description: 'Virtual certification session for new LG Pro Dealers.',
-        startsAt: addDays(now, 7),
-        endsAt: addDays(now, 7),
-        virtualUrl: 'https://example.com/lg-foundations',
+  await prisma.$transaction([
+    prisma.classSession.deleteMany({
+      where: {
+        virtualUrl: {
+          in: [
+            'https://example.com/lg-foundations',
+            'https://example.com/lg-registration',
+          ],
+        },
       },
-      {
-        title: 'LG Equipment Registration Workshop',
-        description: 'Virtual training for registration and warranty workflows.',
-        startsAt: addDays(now, 21),
-        endsAt: addDays(now, 21),
-        virtualUrl: 'https://example.com/lg-registration',
+    }),
+    prisma.resource.deleteMany({
+      where: {
+        url: {
+          in: [
+            'https://example.com/lg-catalog-overview',
+            'https://example.com/registration-overview',
+            'https://apps.apple.com/us/search?term=LG%20ThinQ',
+            'https://apps.apple.com/us/search?term=LG%20HVAC%20Service',
+            'https://apps.apple.com/us/search?term=LGMV-Business',
+          ],
+        },
       },
-    ],
-    skipDuplicates: true,
-  });
+    }),
+    prisma.benefit.deleteMany({
+      where: {
+        url: {
+          in: [
+            'https://example.com/dealer-discounts',
+            'https://example.com/warranty-support',
+            'https://example.com/lead-generation',
+          ],
+        },
+      },
+    }),
+  ]);
 
-  await prisma.resource.createMany({
-    data: [
-      {
-        title: 'LG Catalog Overview',
-        description: 'Catalog placeholder for LG equipment resources.',
-        resourceType: 'CATALOG',
-        category: 'LG Catalogs',
-        url: 'https://example.com/lg-catalog-overview',
-      },
-      {
-        title: 'Registration Overview',
-        description: 'Overview page for equipment registration steps.',
-        resourceType: 'REGISTRATION_OVERVIEW',
-        category: 'Registration',
-        url: 'https://example.com/registration-overview',
-      },
-      {
-        title: 'LG ThinQ',
-        description: 'LG app resource for connected equipment and product support.',
-        resourceType: 'APP',
-        category: 'LG Apps',
-        url: 'https://apps.apple.com/us/search?term=LG%20ThinQ',
-      },
-      {
-        title: 'LG HVAC Service',
-        description: 'LG app resource for HVAC service support.',
-        resourceType: 'APP',
-        category: 'LG Apps',
-        url: 'https://apps.apple.com/us/search?term=LG%20HVAC%20Service',
-      },
-      {
-        title: 'LGMV-Business',
-        description: 'LG app resource for business HVAC service tools.',
-        resourceType: 'APP',
-        category: 'LG Apps',
-        url: 'https://apps.apple.com/us/search?term=LGMV-Business',
-      },
-    ],
-    skipDuplicates: true,
-  });
+  const classSessions = [
+    {
+      title: 'LG Dealer Certification: Foundations',
+      description:
+        'Save your training preference here. Hercules will confirm final enrollment and class logistics.',
+      startsAt: addDays(now, 7),
+      endsAt: addDays(now, 7),
+      virtualUrl: 'https://lghvac.com/training',
+    },
+    {
+      title: 'LG Equipment Registration Workshop',
+      description:
+        'Save your workshop preference here. Hercules will confirm availability and registration details.',
+      startsAt: addDays(now, 21),
+      endsAt: addDays(now, 21),
+      virtualUrl: 'https://www.herculesindustries.com/eventcalendar',
+    },
+  ];
+  await prisma.$transaction(
+    classSessions.map((session) =>
+      prisma.classSession.upsert({
+        where: { virtualUrl: session.virtualUrl },
+        update: session,
+        create: session,
+      }),
+    ),
+  );
 
-  await prisma.benefit.createMany({
-    data: [
-      {
-        title: 'Dealer Discounts',
-        description: 'Discount benefit information for LG Pro Dealers.',
-        benefitType: 'DISCOUNT',
-        url: 'https://example.com/dealer-discounts',
-      },
-      {
-        title: 'Warranty Support',
-        description: 'Warranty support benefit details.',
-        benefitType: 'WARRANTY',
-        url: 'https://example.com/warranty-support',
-      },
-      {
-        title: 'Lead Generation',
-        description: 'Lead generation benefit overview.',
-        benefitType: 'LEAD_GENERATION',
-        url: 'https://example.com/lead-generation',
-      },
-    ],
-    skipDuplicates: true,
-  });
+  const resources = [
+    {
+      title: 'LG Pro Dealer Program',
+      description:
+        'Review current LG Pro Dealer program information, benefits, and eligibility details.',
+      resourceType: 'CATALOG' as const,
+      category: 'LG Pro Dealer',
+      url: 'https://lghvac.com/residential-light-commercial/lg-pro-dealer-program/',
+    },
+    {
+      title: 'LG Warranty & Registration',
+      description:
+        'Review LG registration and warranty requirements for eligible equipment.',
+      resourceType: 'REGISTRATION_OVERVIEW' as const,
+      category: 'Registration',
+      url: 'https://lghvac.com/warranty-page/',
+    },
+    {
+      title: 'LG ThinQ',
+      description:
+        'Review LG ThinQ information and download options for supported connected products.',
+      resourceType: 'APP' as const,
+      category: 'LG Apps',
+      url: 'https://www.lg.com/us/lg-thinq',
+    },
+    {
+      title: 'LG HVAC Training',
+      description:
+        'Explore current LG HVAC training options for contractors and technicians.',
+      resourceType: 'DOCUMENT' as const,
+      category: 'Training',
+      url: 'https://lghvac.com/training',
+    },
+    {
+      title: 'LG HVAC Resource Library',
+      description:
+        'Browse LG HVAC technical resources, product literature, and service tools.',
+      resourceType: 'DOCUMENT' as const,
+      category: 'LG Resources',
+      url: 'https://lghvac.com/resources/',
+    },
+  ];
+  await prisma.$transaction(
+    resources.map((resource) =>
+      prisma.resource.upsert({
+        where: { url: resource.url },
+        update: resource,
+        create: resource,
+      }),
+    ),
+  );
 
-  await prisma.todoItem.createMany({
-    data: [
-      {
-        prospectUserId: prospect.id,
-        title: 'Sign up for certification classes',
-        description: 'Use the Hercules event calendar to choose a class.',
-        type: 'CLASS_SIGNUP',
-        dueAt: addDays(now, 14),
-      },
-      {
-        prospectUserId: prospect.id,
-        title: 'Register your equipment',
-        description: 'Add your first LG equipment registration.',
-        type: 'EQUIPMENT_REGISTRATION',
-        dueAt: addDays(now, 14),
-      },
-      {
-        prospectUserId: prospect.id,
-        title: 'Sign up with JB Warranties',
-        description: 'Required within 30 days after signing up.',
-        type: 'JB_WARRANTIES',
-        dueAt: addDays(now, 30),
-      },
-      {
-        prospectUserId: prospect.id,
-        title: 'Schedule a marketing consultation',
-        description: 'Complete the marketing consultation form.',
-        type: 'MARKETING_CONSULTATION',
-        dueAt: addDays(now, 90),
-      },
-    ],
-    skipDuplicates: true,
-  });
+  const benefits = [
+    {
+      title: 'LG Pro Dealer Benefits',
+      description:
+        'Review current LG Pro Dealer benefits, tiers, and eligibility requirements.',
+      benefitType: 'DISCOUNT' as const,
+      url: 'https://lghvac.com/residential-light-commercial/lg-pro-dealer-program/',
+    },
+    {
+      title: 'LG Warranty & Registration Support',
+      description:
+        'Review warranty and registration requirements for eligible LG HVAC products.',
+      benefitType: 'WARRANTY' as const,
+      url: 'https://lghvac.com/warranty-page/',
+    },
+    {
+      title: 'LG HVAC Resources & Marketing Support',
+      description:
+        'Review current LG HVAC resources, then contact Hercules about available marketing and lead support.',
+      benefitType: 'LEAD_GENERATION' as const,
+      url: 'https://lghvac.com/resources/',
+    },
+  ];
+  await prisma.$transaction(
+    benefits.map((benefit) =>
+      prisma.benefit.upsert({
+        where: { url: benefit.url },
+        update: benefit,
+        create: benefit,
+      }),
+    ),
+  );
+
+  const seededTodos = [
+    {
+      title: 'Choose Your LG Training',
+      description:
+        'Save your preferred LG training session so Hercules can confirm the final schedule and enrollment.',
+      type: TodoItemType.CLASS_SIGNUP,
+      dueAt: addDays(now, 14),
+    },
+    {
+      title: 'Add Your First LG System',
+      description:
+        'Save your first equipment record in Hercules Honors Rewards for dealer onboarding.',
+      type: TodoItemType.EQUIPMENT_REGISTRATION,
+      dueAt: addDays(now, 14),
+    },
+    {
+      title: 'Record Your JB Warranties Setup',
+      description:
+        'After completing JB Warranties setup, record that completion for your Hercules onboarding.',
+      type: TodoItemType.JB_WARRANTIES,
+      dueAt: addDays(now, 30),
+    },
+    {
+      title: 'Share Marketing Availability',
+      description:
+        'Share three times that work for you so Hercules can connect you with marketing resources.',
+      type: TodoItemType.MARKETING_CONSULTATION,
+      dueAt: addDays(now, 90),
+    },
+  ];
+
+  await prisma.$transaction(
+    seededTodos.map(({ title, description, type, dueAt }) =>
+      prisma.todoItem.upsert({
+        where: {
+          prospectUserId_type: {
+            prospectUserId: prospect.id,
+            type,
+          },
+        },
+        update: { title, description },
+        create: {
+          prospectUserId: prospect.id,
+          title,
+          description,
+          type,
+          dueAt,
+        },
+      }),
+    ),
+  );
 
   await prisma.equipmentRegistration.createMany({
     data: [

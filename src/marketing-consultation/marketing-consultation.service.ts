@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MarketingSubmissionStatus, TodoItemStatus } from '@prisma/client';
+import { TodoItemStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingHandoffDto } from './dto/marketing-handoff.dto';
 import { LeadSmartAdapter } from './lead-smart.adapter';
@@ -32,8 +32,7 @@ export class MarketingConsultationService {
           availabilityOptionOne: dto.availabilityOptionOne,
           availabilityOptionTwo: dto.availabilityOptionTwo,
           availabilityOptionThree: dto.availabilityOptionThree,
-          externalSubmissionStatus:
-            handoff.externalSubmissionStatus as MarketingSubmissionStatus,
+          externalSubmissionStatus: handoff.externalSubmissionStatus,
           submittedAt: now,
         },
         create: {
@@ -41,15 +40,9 @@ export class MarketingConsultationService {
           availabilityOptionOne: dto.availabilityOptionOne,
           availabilityOptionTwo: dto.availabilityOptionTwo,
           availabilityOptionThree: dto.availabilityOptionThree,
-          externalSubmissionStatus:
-            handoff.externalSubmissionStatus as MarketingSubmissionStatus,
+          externalSubmissionStatus: handoff.externalSubmissionStatus,
           submittedAt: now,
         },
-      });
-
-      await tx.prospectProfile.update({
-        where: { userId: prospectUserId },
-        data: { marketingConsultationCompletedAt: now },
       });
 
       await tx.todoItem.updateMany({

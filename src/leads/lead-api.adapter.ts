@@ -3,8 +3,10 @@ import { UpdateLeadDto } from './dto/update-lead.dto';
 
 @Injectable()
 export class LeadApiAdapter {
-  async syncLeadUpdate(_externalLeadId: string | null, _dto: UpdateLeadDto) {
+  syncLeadUpdate(_externalLeadId: string | null, _dto: UpdateLeadDto) {
+    void _externalLeadId;
+    void _dto;
     // TODO: Lead API host, credentials, and payload contract are unresolved in the design doc.
-    return { synced: false, reason: 'LEAD_API_UNCONFIGURED' };
+    return Promise.resolve({ synced: false, reason: 'LEAD_API_UNCONFIGURED' });
   }
 }

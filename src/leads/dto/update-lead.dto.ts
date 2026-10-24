@@ -1,5 +1,5 @@
 import { LeadRecordStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateLeadDto {
   @IsOptional()
@@ -8,5 +8,6 @@ export class UpdateLeadDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(4_000)
   notes?: string;
 }

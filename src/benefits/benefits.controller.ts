@@ -19,6 +19,11 @@ export class BenefitsController {
     return this.benefitsService.list();
   }
 
+  @Get('financing')
+  financing() {
+    return this.benefitsService.financing();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.benefitsService.findOne(id);

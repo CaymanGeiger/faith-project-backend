@@ -1,5 +1,7 @@
+import { AllowBeforeTraining } from '../onboarding/onboarding-access';
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser } from './authenticated-user';
 import { CurrentUser } from './current-user.decorator';
@@ -9,21 +11,25 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterFromInviteDto } from './dto/register-from-invite.dto';
 
 @ApiTags('auth')
+@AllowBeforeTraining()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('invite-details')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   inviteDetails(@Body() dto: InviteDetailsDto) {
     return this.authService.getInviteDetails(dto);
   }
 
   @Post('register-from-invite')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   registerFromInvite(@Body() dto: RegisterFromInviteDto) {
     return this.authService.registerFromInvite(dto);
   }
 
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -38,8 +44,8 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  logout() {
-    return this.authService.logout();
+  logout(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.logout(user);
   }
 
   @ApiBearerAuth()

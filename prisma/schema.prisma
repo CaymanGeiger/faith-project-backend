@@ -93,18 +93,56 @@ enum ConversationType {
   PROSPECT_MANAGER
 }
 
+enum AccountDeletionRequestSource {
+  IN_APP
+  WEB
+}
+
+enum AccountDeletionRequestStatus {
+  PENDING_VERIFICATION
+  PENDING_REASSIGNMENT
+  COMPLETED
+}
+
+enum MessageReportStatus {
+  OPEN
+  RESOLVED
+}
+
+enum JotformSyncStatus {
+  PENDING
+  PROCESSING
+  RETRY_WAIT
+  PROCESSED
+  DEAD_LETTER
+  REJECTED
+}
+
+enum JotformSyncSource {
+  WEBHOOK
+  RECONCILIATION
+  MANUAL_REPLAY
+}
+
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  firstName    String
-  lastName     String
-  phone        String?
-  role         UserRole
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  lastLoginAt  DateTime?
+  id                      String     @id @default(cuid())
+  email                   String     @unique
+  passwordHash            String
+  sessionVersion          Int        @default(0)
+  firstName               String
+  lastName                String
+  phone                   String?
+  role                    UserRole
+  status                  UserStatus @default(ACTIVE)
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  lastLoginAt             DateTime?
+  onboardingRequired      Boolean    @default(true)
+  activationSubmissionId  String?    @unique
+  initialTrainingVerifiedAt DateTime?
+  termsAcceptedAt         DateTime?
+  termsVersion            String?
+  privacyPolicyAcceptedAt DateTime?
 
   prospectProfile     ProspectProfile?          @relation("ProspectUser")
   salesManagerProfile SalesManagerProfile?      @relation("SalesManagerUser")
@@ -117,6 +155,72 @@ model User {
   managedLeadRecords  LeadRecord[]              @relation("LeadManager")
   participants        ConversationParticipant[]
   sentMessages        Message[]
+  filedMessageReports MessageReport[]           @relation("MessageReporter")
+  blocksCreated       UserBlock[]               @relation("UserBlocker")
+  blocksReceived      UserBlock[]               @relation("BlockedUser")
+  securityChallenges SecurityChallenge[]
+  emailHistory AccountEmailHistory[]
+  pushDevices PushDevice[]
+  ownedSubmissions JotformSubmission[]
+  initialTrainingVerification InitialTrainingVerification? @relation("TrainingProspect")
+  recordedTrainingVerifications InitialTrainingVerification[] @relation("TrainingVerifier")
+}
+
+model SecurityChallenge {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose String
+  codeHash String
+  deliveryCode String?
+  mailAttempts Int @default(0)
+  mailNextAttemptAt DateTime @default(now())
+  mailLeaseUntil DateTime?
+  targetEmail String
+  sessionVersion Int
+  attempts Int @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@unique([userId, purpose])
+}
+
+model AccountEmailHistory {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email String
+  createdAt DateTime @default(now())
+  @@unique([userId, email])
+}
+
+model PushDevice {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token String @unique
+  platform String
+  sessionTokenHash String?
+  sessionVersion Int
+  sessionExpiresAt DateTime
+  updatedAt DateTime @updatedAt
+  deliveries PushDelivery[]
+  @@index([userId])
+}
+
+model PushDelivery {
+  id String @id @default(cuid())
+  deviceId String
+  device PushDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  messageId String
+  recipientId String
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  receiptId String?
+  createdAt DateTime @default(now())
+  @@unique([deviceId, messageId])
+  @@index([status, nextAttemptAt])
 }
 
 model ProspectProfile {
@@ -138,6 +242,12 @@ model ProspectProfile {
 }
 
 model SalesManagerProfile {
+  availabilityTimezone String?
+  availabilityHours Json?
+  availabilityMode String @default("SCHEDULE")
+  availabilityOverrideUntil DateTime?
+  silenceWhenUnavailable Boolean @default(false)
+  outOfOfficeMessage String?
   id        String   @id @default(cuid())
   userId    String   @unique
   createdAt DateTime @default(now())
@@ -146,14 +256,31 @@ model SalesManagerProfile {
   user User @relation("SalesManagerUser", fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model InitialTrainingVerification {
+  developmentOnly Boolean @default(false)
+  id String @id @default(cuid())
+  prospectUserId String @unique
+  verifiedByUserId String?
+  completedAt DateTime
+  verifiedAt DateTime @default(now())
+  source String
+  reference String
+  enrollmentId String?
+  prospect User @relation("TrainingProspect", fields: [prospectUserId], references: [id], onDelete: Cascade)
+  verifier User? @relation("TrainingVerifier", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+}
+
 model RegistrationInvite {
   id                     String           @id @default(cuid())
   token                  String           @unique
+  recipientEmail         String?
   roleToCreate           InviteStatusRole @default(PROSPECT)
   assignedSalesManagerId String
   expiresAt              DateTime
   usedAt                 DateTime?
   createdAt              DateTime         @default(now())
+
+  @@index([recipientEmail])
 }
 
 model ClassSession {
@@ -286,6 +413,7 @@ model ConversationParticipant {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([conversationId, userId])
+  @@index([userId])
 }
 
 model Message {
@@ -298,9 +426,139 @@ model Message {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User            @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  reports      MessageReport[]
 
   @@unique([senderId, clientMessageId])
   @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model AccountDeletionRequest {
+  id          String                       @id @default(cuid())
+  userId      String?
+  email       String
+  role        UserRole?
+  source      AccountDeletionRequestSource
+  status      AccountDeletionRequestStatus @default(PENDING_VERIFICATION)
+  requestedAt DateTime                     @default(now())
+  verifiedAt  DateTime?
+  verifiedBy  String?
+  completedAt DateTime?
+
+  @@index([status, requestedAt])
+  @@index([email, requestedAt])
+}
+
+model MessageReport {
+  id           String              @id @default(cuid())
+  messageId    String
+  reporterId   String
+  reason       String?
+  status       MessageReportStatus @default(OPEN)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  resolvedAt   DateTime?
+  resolution   String?
+  resolutionBy String?
+
+  message  Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reporter User    @relation("MessageReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, reporterId])
+  @@index([status, createdAt])
+}
+
+model UserBlock {
+  blockerId     String
+  blockedUserId String
+  createdAt     DateTime @default(now())
+
+  blocker     User @relation("UserBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedUser User @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedUserId])
+  @@index([blockedUserId])
+}
+
+model JotformSubmission {
+  id                     String            @id @default(cuid())
+  formId                 String
+  submissionId           String
+  lastEnqueuedBy         JotformSyncSource
+  syncStatus             JotformSyncStatus @default(PENDING)
+  generation             Int               @default(1)
+  processingGeneration   Int?
+  attemptCount           Int               @default(0)
+  nextAttemptAt          DateTime          @default(now())
+  leaseToken             String?
+  leaseExpiresAt         DateTime?
+  firstWebhookReceivedAt DateTime?
+  lastWebhookReceivedAt  DateTime?
+  webhookDeliveryCount   Int               @default(0)
+  envelopeFingerprint    String?
+  vendorCreatedAt        String?
+  vendorUpdatedAt        String?
+  vendorStatus           String?
+  workflowStatus         String?
+  contentHash            String?
+  ownerUserId            String?
+  owner                  User? @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownershipVerifiedAt    DateTime?
+  ownershipVerifiedBy    String?
+  respondentEmail        String?
+  companyName            String?
+  dealerNumber           String?
+  reviewReasonCode       String?
+  privacyErasedAt        DateTime?
+  lastVerifiedAt         DateTime?
+  lastAttemptAt          DateTime?
+  processedAt            DateTime?
+  deadLetteredAt         DateTime?
+  lastErrorCode          String?
+  lastErrorHttpStatus    Int?
+  lastErrorRetryable     Boolean?
+  lastErrorAt            DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  @@unique([formId, submissionId])
+  @@index([syncStatus, nextAttemptAt])
+  @@index([formId, vendorUpdatedAt, submissionId])
+  @@index([respondentEmail])
+  @@index([ownerUserId])
+}
+
+model JotformSyncState {
+  formId                      String    @id
+  watermark                   String?
+  reconciliationFrom          String?
+  reconciliationOffset        Int       @default(0)
+  reconciliationHighWatermark String?
+  reconciliationAfterId       String?
+  lastAttemptAt               DateTime?
+  lastSuccessfulAt            DateTime?
+  consecutiveFailures         Int       @default(0)
+  leaseToken                  String?
+  leaseExpiresAt              DateTime?
+  lastErrorCode               String?
+  apiLimitRemaining           Int?
+  apiLimitResetAt             DateTime?
+  apiCircuitOpenUntil         DateTime?
+  apiCircuitReason            String?
+  apiLeaseToken               String?
+  apiLeaseExpiresAt           DateTime?
+  lastOperationalAlertAt      DateTime?
+  lastOperationalAlertHash    String?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+}
+
+
+// Only hashes are stored; expired rows can be safely pruned.
+model RevokedSession {
+  tokenHash String @id
+  expiresAt DateTime
+  @@index([expiresAt])
 }
